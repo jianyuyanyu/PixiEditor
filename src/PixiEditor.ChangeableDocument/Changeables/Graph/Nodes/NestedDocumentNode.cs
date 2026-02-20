@@ -1,4 +1,5 @@
-﻿using Drawie.Backend.Core;
+﻿using System.Drawing;
+using Drawie.Backend.Core;
 using Drawie.Backend.Core.Numerics;
 using Drawie.Backend.Core.Surfaces;
 using Drawie.Backend.Core.Surfaces.ImageData;
@@ -44,6 +45,8 @@ public class NestedDocumentNode : LayerNode, IInputDependentOutputs, ITransforma
     private ExposeValueNode[]? cachedExposeNodes;
     private BrushOutputNode[]? brushOutputNodes;
     private IReadOnlyNode[] toExecute;
+
+    protected override bool MustRenderInSrgb(SceneObjectRenderContext ctx) => false;
 
     public NestedDocumentNode()
     {
@@ -282,75 +285,16 @@ public class NestedDocumentNode : LayerNode, IInputDependentOutputs, ITransforma
 
     protected override void DrawWithoutFilters(SceneObjectRenderContext ctx, Canvas workingSurface, Paint paint)
     {
-        if (NestedDocument.Value is null)
-            return;
-
-        int saved;
-        if (paint.IsOpaqueStandardNonBlendingPaint)
-        {
-            saved = workingSurface.Save();
-        }
-        else
-        {
-            saved = workingSurface.SaveLayer(paint);
-        }
-
-        workingSurface.SetMatrix(workingSurface.TotalMatrix.Concat(TransformationMatrix));
-        if (ClipToDocumentBounds.Value)
-        {
-            var docSize = NestedDocument.Value.DocumentInstance.Size;
-            workingSurface.ClipRect(new RectD(VecI.Zero, docSize));
-        }
-
-        ExecuteNested(ctx);
-
-        workingSurface.RestoreToCount(saved);
+        RenderNested(ctx, workingSurface, paint);
     }
-
 
     protected override void DrawWithFilters(SceneObjectRenderContext ctx, Canvas workingSurface, Paint paint)
     {
-        if (NestedDocument.Value is null)
-            return;
-
-        using Texture intermediate = Texture.ForProcessing(workingSurface, ColorSpace.CreateSrgb());
-        var latestSize = new RectI(VecI.Zero, lastDocument.DocumentInstance.Size);
-        intermediate.DrawingSurface.Canvas.SetMatrix(
-            intermediate.DrawingSurface.Canvas.TotalMatrix.Concat(TransformationMatrix));
-
-        ctx.RenderSurface = intermediate.DrawingSurface.Canvas;
-        ctx.RenderOutputSize = latestSize.Size;
-        ExecuteNested(ctx);
-
-        int saved = workingSurface.Save();
-        if (ClipToDocumentBounds.Value)
-        {
-            var docSize = NestedDocument.Value.DocumentInstance.Size;
-            workingSurface.ClipRect(new RectD(VecI.Zero, docSize));
-        }
-
-        workingSurface.SetMatrix(Matrix3X3.Identity);
-        workingSurface.DrawSurface(intermediate.DrawingSurface, 0, 0, paint);
-        workingSurface.RestoreToCount(saved);
+        RenderNested(ctx, workingSurface, paint);
     }
 
     public void Rasterize(Canvas surface, Paint paint, int atFrame)
     {
-        if (NestedDocument.Value is null)
-            return;
-
-        int layer;
-        if (paint is { IsOpaqueStandardNonBlendingPaint: false })
-        {
-            layer = surface.SaveLayer(paint);
-        }
-        else
-        {
-            layer = surface.Save();
-        }
-
-        surface.SetMatrix(surface.TotalMatrix.Concat(TransformationMatrix));
-
         RenderContext context = new(
             surface, atFrame, ChunkResolution.Full,
             surface.DeviceClipBounds.Size,
@@ -359,10 +303,56 @@ public class NestedDocumentNode : LayerNode, IInputDependentOutputs, ITransforma
             BilinearSampling.Value ? SamplingOptions.Bilinear : SamplingOptions.Default,
             Instance.NodeGraph) { FullRerender = true, };
 
-        ExecuteNested(context);
-
-        surface.RestoreToCount(layer);
+        RenderNested(context, surface, paint);
     }
+
+    private void RenderNested(RenderContext ctx, Canvas workingSurface, Paint paint)
+    {
+        if (NestedDocument.Value is null)
+            return;
+
+        using var intermediate = Texture.ForProcessing(workingSurface.Surface, Instance.ProcessingColorSpace);
+        int workingSurfaceSaved = 0;
+        if (paint.IsOpaqueStandardNonBlendingPaint)
+        {
+            workingSurfaceSaved = workingSurface.Save();
+        }
+        else
+        {
+            workingSurfaceSaved = workingSurface.SaveLayer(paint);
+        }
+
+        workingSurface.SetMatrix(Matrix3X3.Identity);
+
+        Canvas targetSurface = intermediate.DrawingSurface.Canvas;
+
+        targetSurface.SetMatrix(targetSurface.TotalMatrix.Concat(TransformationMatrix));
+        if (ClipToDocumentBounds.Value)
+        {
+            var docSize = NestedDocument.Value.DocumentInstance.Size;
+            targetSurface.ClipRect(new RectD(VecI.Zero, docSize));
+        }
+
+        var clonedCtx = ctx.Clone();
+        clonedCtx.RenderSurface = targetSurface;
+        ExecuteNested(clonedCtx);
+
+        Paint? paintToApply = null;
+        if (!Instance.ProcessingColorSpace.IsSrgb && paint.ColorFilter == null)
+        {
+            // This is a weird hack to make alpha between linear -> srgb not glitch if the nested document does something weird with alpha.
+            // Look at NestedColorSpaceOverlayAlpha.pixi in RenderTests and see what happens when you remove this line.
+            paintToApply = new Paint();
+            paintToApply.ColorFilter = ColorFilter.CreateColorMatrix(ColorMatrix.Identity);
+        }
+
+        workingSurface.DrawSurface(intermediate.DrawingSurface, 0, 0, paintToApply);
+        workingSurface.RestoreToCount(workingSurfaceSaved);
+
+        paintToApply?.ColorFilter?.Dispose();
+        paintToApply?.Dispose();
+    }
+
 
     private void ExecuteNested(RenderContext ctx)
     {

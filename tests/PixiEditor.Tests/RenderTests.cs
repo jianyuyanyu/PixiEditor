@@ -53,6 +53,10 @@ public class RenderTests : FullPixiEditorTest
     [InlineData("FuncSwitch")]
     [InlineData("ContextlessConditional")]
     [InlineData("NestedElephants")]
+    [InlineData("NestedColorSpace")]
+    [InlineData("NestedFilter")]
+    [InlineData("NestedColorSpaceOverlayAlphaFilter")]
+    [InlineData("NestedVectorWithSepiaFilter")]
     public void TestThatPixiFilesRenderTheSameResultAsSavedPng(string fileName, string? resultName = null)
     {
         if (!DrawingBackendApi.Current.IsHardwareAccelerated)
