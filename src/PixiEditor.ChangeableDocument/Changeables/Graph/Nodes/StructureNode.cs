@@ -28,6 +28,9 @@ public abstract class StructureNode : RenderNode, IReadOnlyStructureNode, IRende
     public const string FiltersPropertyName = "Filters";
     public const string FilterlessOutputPropertyName = "FilterlessOutput";
     public const string RawOutputPropertyName = "RawOutput";
+    public const string UseCustomTimeProperty = "UseCustomTime";
+    public const string CustomActiveFrameProperty = "CustomActiveFrame";
+    public const string CustomNormalizedTimeProperty = "CustomNormalizedTime";
 
     public InputProperty<float> Opacity { get; }
     public InputProperty<bool> IsVisible { get; }
@@ -36,6 +39,9 @@ public abstract class StructureNode : RenderNode, IReadOnlyStructureNode, IRende
     public RenderInputProperty CustomMask { get; }
     public InputProperty<bool> MaskIsVisible { get; }
     public InputProperty<Filter> Filters { get; }
+    public InputProperty<bool> UseCustomTime { get; }
+    public InputProperty<int> CustomActiveFrame { get; }
+    public InputProperty<double> CustomNormalizedTime { get; }
 
     public RenderInputProperty Background { get; }
     public RenderOutputProperty FilterlessOutput { get; }
@@ -96,6 +102,9 @@ public abstract class StructureNode : RenderNode, IReadOnlyStructureNode, IRende
         CustomMask = CreateRenderInput(MaskPropertyName, "MASK");
         MaskIsVisible = CreateInput<bool>(MaskIsVisiblePropertyName, "MASK_IS_VISIBLE", true);
         Filters = CreateInput<Filter>(FiltersPropertyName, "FILTERS", null);
+        UseCustomTime = CreateInput<bool>(UseCustomTimeProperty, "USE_CUSTOM_TIME", false);
+        CustomActiveFrame = CreateInput<int>(CustomActiveFrameProperty, "CUSTOM_ACTIVE_FRAME", 0);
+        CustomNormalizedTime = CreateInput<double>(CustomNormalizedTimeProperty, "CUSTOM_NORMALIZED_TIME", 0);
 
         FilterlessOutput = CreateRenderOutput(FilterlessOutputPropertyName, "WITHOUT_FILTERS",
             () => filterlessPainter, () => Background.Value);
@@ -163,6 +172,10 @@ public abstract class StructureNode : RenderNode, IReadOnlyStructureNode, IRende
         }
 
         var renderObjectContext = CreateSceneContext(context, renderTarget, output);
+        if(UseCustomTime.Value)
+        {
+            renderObjectContext.FrameTime = new KeyFrameTime(CustomActiveFrame.Value, CustomNormalizedTime.Value);
+        }
 
         int renderSaved = renderTarget.Save();
         VecD scenePos = GetScenePosition(context.FrameTime);

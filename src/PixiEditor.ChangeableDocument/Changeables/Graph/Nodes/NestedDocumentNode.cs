@@ -33,6 +33,7 @@ public class NestedDocumentNode : LayerNode, IInputDependentOutputs, ITransforma
 
     public Matrix3X3 TransformationMatrix { get; set; } = Matrix3X3.Identity;
 
+
     public RectD TransformedAABB => new ShapeCorners(NestedDocument.Value?.DocumentInstance?.Size / 2f ?? VecD.Zero,
             NestedDocument.Value?.DocumentInstance?.Size ?? VecD.Zero)
         .WithMatrix(TransformationMatrix).AABBBounds;
@@ -144,6 +145,13 @@ public class NestedDocumentNode : LayerNode, IInputDependentOutputs, ITransforma
 
             if (!variable.Value.IsExposed)
                 continue;
+
+            var existing = InputProperties.FirstOrDefault(x =>
+                x.InternalPropertyName == variable.Key);
+            if (existing != null) // Existing input with same name but different type
+            {
+                RemoveInputProperty(existing);
+            }
 
             AddInputProperty(new InputProperty(this, variable.Key, variable.Key, variable.Value.Value,
                 variable.Value.Type));
