@@ -8,7 +8,7 @@ internal class AnimationData : IReadOnlyAnimationData
 {
     public int FrameRate { get; set; } = 60;
     public int OnionFrames { get; set; } = 1;
-    public int DefaultEndFrame { get; set; } = 24;
+    public int DefaultEndFrame { get; set; } = 60;
     public IReadOnlyList<IReadOnlyKeyFrame> KeyFrames => keyFrames;
     public double OnionOpacity { get; set; } = 50;
     public bool FallbackAnimationToLayerImage { get; set; }
