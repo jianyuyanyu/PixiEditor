@@ -38,6 +38,7 @@ internal class SceneRenderer
     private int lastGraphCacheHash = -1;
     private Dictionary<Guid, KeyFrameTime> lastFrameTimes = new();
     private Dictionary<Guid, bool> lastFramesVisibility = new();
+    private HashSet<Guid> lastRenderedViewports = new();
 
     private TextureCache textureCache = new();
 
@@ -102,6 +103,8 @@ internal class SceneRenderer
             viewport.Value.InvalidateVisual();
             renderedCount++;
         }
+
+        lastRenderedViewports = stateViewports.Keys.ToHashSet();
 
         if (renderedCount == 0 && previewTextures is { Count: > 0 })
         {
@@ -193,6 +196,7 @@ internal class SceneRenderer
             debugRecord;
 
         shouldRerender |= lastGraphCacheHash != graphCacheHash;
+        shouldRerender |= !lastRenderedViewports.Contains(viewportId);
 
         if (shouldRerender)
         {
